@@ -1,0 +1,233 @@
+{
+  "name": "Mail Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "01d78676-23c8-4995-90bf-d10b6ffb266c",
+      "name": "IMAP - Alertas",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -192
+      ],
+      "credentials": {
+        "imap": {
+          "id": "8ZH90ysh1kH3cQX0",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "-1003064889195",
+        "text": "=**{{ $json.MailType }}**\n\n👤 **De:** {{ $json.from.split(\"<\")[0] }}\n🕒 **Fecha:** {{ $json.formattedDate }}\n📄 **Asunto:** {{ $json.subject }}\n\n{{$json[\"reducedText\"]}}",
+        "additionalFields": {
+          "message_thread_id": "={{ $json.ThreatID }}"
+        }
+      },
+      "id": "cdf731a4-02b6-4962-a80d-93b053bf92e0",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -192
+      ],
+      "webhookId": "e5003d07-6d45-4c92-a847-bcdf1f1d1c7e",
+      "credentials": {
+        "telegramApi": {
+          "id": "BEjTUWvH70CSQsc8",
+          "name": "Informaticos Cubacar Aeropuerto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.from }}",
+                    "rightValue": "print.aeropuerto@rch.transtur.cu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "623dd25f-2dd6-45c1-b538-9b2a721f3b02"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Print"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": false
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -16,
+        -192
+      ],
+      "id": "5e70bc51-23fd-4f94-91b5-2fb032e5d3fa",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a9c9a9f4-f75a-43ee-930e-5cfea2b72647",
+              "name": "MailType",
+              "value": "🖨️ Alerta de Impresora",
+              "type": "string"
+            },
+            {
+              "id": "113083ce-8238-4d0e-ba37-b02b4b78588e",
+              "name": "textPlain",
+              "value": "={{ $json.textPlain }}",
+              "type": "string"
+            },
+            {
+              "id": "5e90c82f-761e-4e62-bb46-b342639dd775",
+              "name": "ThreatID",
+              "value": "615",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        176,
+        -400
+      ],
+      "id": "9f44e8a8-d493-4782-b571-6d7eaee410bc",
+      "name": "Print"
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ $json.metadata['x-mdarrival-date'] }}",
+        "format": "custom",
+        "customFormat": "HH:mm - dd/MM/yyyy",
+        "options": {
+          "includeInputFields": true
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -192
+      ],
+      "id": "b3ba5679-1d12-48ee-ae0d-21a5ce3d8a41",
+      "name": "Date & Time"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener el primer (y probablemente único) item de entrada\nconst item = $input.first();\n\n// Si no existe o no tiene el campo, devolver tal cual\nif (!item?.json?.textPlain) {\n  return $input.all();\n}\n\nconst inputText = item.json.textPlain;\n\n// Procesar el texto\nconst lines = inputText.split('\\n').map(line => line.trim()).filter(line => line !== '');\n\nconst resultLines = [];\n\n// Encontrar índices de las secciones\nconst alertStart = lines.findIndex(line => line.includes('Alert Information:'));\nconst deviceStart = lines.findIndex(line => line.includes('Device Identification:'));\nconst actionStart = lines.findIndex(line => line.includes('Action:'));\n\n// Extraer la sección de alerta (ID y descripción)\nif (alertStart !== -1 && deviceStart !== -1) {\n  const alertLines = lines.slice(alertStart + 1, deviceStart);\n  const idDescIndex = alertLines.findIndex(line => line.includes('ID Number') && line.includes('Description'));\n  if (idDescIndex !== -1) {\n    resultLines.push(alertLines[idDescIndex]); // \"ID Number       Description\"\n    resultLines.push(alertLines[idDescIndex + 1]); // \"---------       -----------\"\n    // Buscar la primera línea con datos reales\n    for (let i = idDescIndex + 2; i < alertLines.length; i++) {\n      if (alertLines[i].trim() !== '' && !alertLines[i].startsWith('Device Identification')) {\n        resultLines.push(alertLines[i]);\n        break;\n      }\n    }\n  }\n}\n\n// Añadir un salto de línea (línea vacía) antes de los datos del dispositivo\nresultLines.push('');\n\n// Extraer los campos deseados de Device Identification\nconst deviceEnd = actionStart !== -1 ? actionStart : lines.length;\nconst deviceLines = lines.slice(deviceStart + 1, deviceEnd);\n\nconst fieldsToExtract = [\n  'Product Serial Number',\n  'Asset Number',\n  'Device Location',\n  'Host Name',\n  'IP Address'\n];\n\nfieldsToExtract.forEach(field => {\n  const line = deviceLines.find(l => l.startsWith(field + ':'));\n  if (line) resultLines.push(line);\n});\n\nconst reducedText = resultLines.join('\\n');\n\n// Crear una copia del JSON original y añadir/actualizar reducedText\nconst outputJson = {\n  ...item.json,\n  reducedText: reducedText\n};\n\n// Devolver el item modificado (manteniendo la estructura esperada por n8n)\nreturn [outputJson];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -400
+      ],
+      "id": "eb18037d-7e29-4ba3-a080-86eabb9c126e",
+      "name": "Limpiar Texto"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IMAP - Alertas": {
+      "main": [
+        [
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Print",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram": {
+      "main": [
+        []
+      ]
+    },
+    "Print": {
+      "main": [
+        [
+          {
+            "node": "Limpiar Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar Texto": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "adac628d-30ae-466c-9777-83f957c3fc6a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "508c44782fb8109a55c6046892ddd4d86ec26c64c750a854d6fa1cb84a4c1ee1"
+  },
+  "id": "7EN7veb0biGGRwns",
+  "tags": []
+}
